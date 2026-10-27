@@ -60,6 +60,7 @@ CREATE TABLE course (
     id INT NOT NULL AUTO_INCREMENT,
     course_name VARCHAR(255) NOT NULL,
     department VARCHAR(255) NOT NULL,
+    description VARCHAR(500),
     PRIMARY KEY (id)
 );
 

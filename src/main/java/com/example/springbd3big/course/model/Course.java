@@ -40,6 +40,9 @@ public class Course {
     @NotBlank
     private String departament;
 
+    @Column(name = "description")
+    private String description;
+
     @Override
     public String toString(){
         return "Id: " + id + "CourseName: " + courseName + "Department: " + departament;
