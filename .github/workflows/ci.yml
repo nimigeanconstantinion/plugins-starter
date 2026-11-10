@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: nimigeanconstantinion/plugins-store
-          ref: v0.1.0
+          ref: v0.1.1
           token: ${{ secrets.PLUGINS_STORE_TOKEN || github.token }}
           path: .plugins-store
       - name: Install Claude Code
@@ -48,4 +48,43 @@ jobs:
         if: always()
         with:
           name: verdict-${{ matrix.plugin }}
-          path: /tmp/verdict-${{ matrix.plugin }}.md
+          path: |
+            /tmp/verdict-${{ matrix.plugin }}.md
+            /tmp/comments-${{ matrix.plugin }}.json
+
+  claude-comment:
+    needs: claude-review
+    if: ${{ !cancelled() && needs.claude-review.result != 'skipped' }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: verdict-*
+          path: verdicts
+          merge-multiple: true
+      - name: Post review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          shopt -s nullglob
+          md=(verdicts/*.md)
+          js=(verdicts/*.json)
+          if [ ${#md[@]} -gt 0 ]; then
+            body=$(for f in "${md[@]}"; do cat "$f"; echo; done)
+          else
+            body="Niciun verdict generat."
+          fi
+          if [ ${#js[@]} -gt 0 ]; then
+            jq -s 'add' "${js[@]}" > comments.json
+          else
+            echo '[]' > comments.json
+          fi
+          jq -n --arg body "$body" --arg sha "$SHA" --slurpfile c comments.json \
+            '{commit_id: $sha, body: $body, event: "COMMENT", comments: $c[0]}' > review.json
+          gh api --method POST "repos/$REPO/pulls/$PR/reviews" --input review.json \
+            || gh api --method POST "repos/$REPO/issues/$PR/comments" -f body="$body"
